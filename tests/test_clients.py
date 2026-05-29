@@ -57,6 +57,32 @@ def test_jira_transition_payload() -> None:
     }
 
 
+def test_jira_create_issue_payload() -> None:
+    session = FakeSession([FakeResponse({"id": "10002", "key": "TST-2"})])
+    client = JiraClient("https://jira.example.com", session, 30)
+
+    result = client.create_issue(
+        {
+            "project": {"key": "TST"},
+            "summary": "New issue",
+            "issuetype": {"name": "Task"},
+            "description": "Details",
+        }
+    )
+
+    assert result["key"] == "TST-2"
+    assert session.calls[0][0] == "POST"
+    assert session.calls[0][1] == "https://jira.example.com/rest/api/2/issue"
+    assert session.calls[0][2]["json"] == {
+        "fields": {
+            "project": {"key": "TST"},
+            "summary": "New issue",
+            "issuetype": {"name": "Task"},
+            "description": "Details",
+        }
+    }
+
+
 def test_confluence_update_page_fetches_next_version() -> None:
     session = FakeSession(
         [

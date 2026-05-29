@@ -79,6 +79,13 @@ def jira_add_comment(key: str, body: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def jira_create_issue(fields: dict[str, Any]) -> dict[str, Any]:
+    """Create a Jira issue from a fields object. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+    _require_writes()
+    return _jira().create_issue(fields=fields)
+
+
+@mcp.tool()
 def jira_update_issue_fields(key: str, fields: dict[str, Any]) -> dict[str, Any]:
     """Update Jira issue fields. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
     _require_writes()

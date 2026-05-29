@@ -75,6 +75,7 @@ async def _run_stdio_smoke(port: int) -> None:
             tools = await session.list_tools()
             names = {tool.name for tool in tools.tools}
             assert "jira_get_issue" in names
+            assert "jira_create_issue" in names
             assert "bitbucket_create_pull_request" in names
 
             issue = await session.call_tool("jira_get_issue", {"key": "TST-1"})

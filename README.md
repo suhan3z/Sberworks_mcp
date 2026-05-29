@@ -50,6 +50,7 @@ Jira:
 - `jira_get_issue`
 - `jira_get_comments`
 - `jira_add_comment`
+- `jira_create_issue`
 - `jira_update_issue_fields`
 - `jira_list_transitions`
 - `jira_transition_issue`

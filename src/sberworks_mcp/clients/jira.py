@@ -35,6 +35,9 @@ class JiraClient(AtlassianClient):
     def add_comment(self, key: str, body: str) -> dict[str, Any]:
         return self.request("POST", f"/rest/api/2/issue/{key}/comment", json={"body": body})
 
+    def create_issue(self, fields: dict[str, Any]) -> dict[str, Any]:
+        return self.request("POST", "/rest/api/2/issue", json={"fields": fields})
+
     def update_issue_fields(self, key: str, fields: dict[str, Any]) -> dict[str, Any]:
         return self.request("PUT", f"/rest/api/2/issue/{key}", json={"fields": fields})
 
