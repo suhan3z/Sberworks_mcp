@@ -9,6 +9,7 @@ from sberworks_mcp.auth import SessionFactory
 from sberworks_mcp.clients.bitbucket import BitbucketClient
 from sberworks_mcp.clients.confluence import ConfluenceClient
 from sberworks_mcp.clients.jira import JiraClient
+from sberworks_mcp.clients.zephyr import ZephyrClient
 from sberworks_mcp.config import Settings, load_settings, require_writes
 
 mcp = FastMCP("Sberworks MCP")
@@ -41,6 +42,15 @@ def _bitbucket() -> BitbucketClient:
     return BitbucketClient(
         settings.bitbucket_base_url,
         SessionFactory(settings).create(service="bitbucket"),
+        settings.timeout_seconds,
+    )
+
+
+def _zephyr() -> ZephyrClient:
+    settings = _settings()
+    return ZephyrClient(
+        settings.jira_base_url,
+        SessionFactory(settings).create(service="jira"),
         settings.timeout_seconds,
     )
 
@@ -242,6 +252,54 @@ def bitbucket_create_pull_request(
     )
 
 
+@mcp.tool()
+def zephyr_get_cycle(cycle_key: str) -> dict[str, Any]:
+    """Read Zephyr test cycle metadata using /rest/atm/latest."""
+    return _zephyr().get_cycle(cycle_key=cycle_key)
+
+
+@mcp.tool()
+def zephyr_get_cycle_case_keys(cycle_key: str) -> list[str]:
+    """Read Zephyr testcase keys linked to a test cycle."""
+    return _zephyr().get_cycle_case_keys(cycle_key=cycle_key)
+
+
+@mcp.tool()
+def zephyr_get_test_case(case_key: str) -> dict[str, Any]:
+    """Read Zephyr testcase summary metadata."""
+    return _zephyr().get_test_case(case_key=case_key)
+
+
+@mcp.tool()
+def zephyr_get_test_cases(case_keys: list[str]) -> list[dict[str, Any]]:
+    """Read Zephyr testcase summaries by keys."""
+    return _zephyr().get_test_cases(case_keys=case_keys)
+
+
+@mcp.tool()
+def zephyr_get_test_case_details(case_key: str) -> dict[str, Any]:
+    """Read Zephyr testcase details including manual steps and attachments."""
+    return _zephyr().get_test_case_details(case_key=case_key)
+
+
+@mcp.tool()
+def zephyr_export_cycle_cases(cycle_key: str) -> dict[str, Any]:
+    """Export Zephyr test cycle metadata and testcase summaries."""
+    return _zephyr().export_cycle_cases(cycle_key=cycle_key)
+
+
+@mcp.tool()
+def zephyr_export_cycle_case_details(cycle_key: str) -> dict[str, Any]:
+    """Export Zephyr test cycle metadata and detailed testcases with steps."""
+    return _zephyr().export_cycle_case_details(cycle_key=cycle_key)
+
+
+@mcp.tool()
+def zephyr_probe_cycle_endpoints(project_id: int, cycle_key: str) -> list[dict[str, Any]]:
+    """Probe Zephyr cycle page and /rest/atm/latest endpoints for diagnostics."""
+    return _zephyr().probe_cycle_endpoints(project_id=project_id, cycle_key=cycle_key)
+
+
 @mcp.resource("jira://issue/{key}")
 def jira_issue_resource(key: str) -> str:
     """Jira issue resource."""
@@ -258,6 +316,18 @@ def confluence_page_resource(page_id: str) -> str:
 def bitbucket_file_resource(project: str, repo: str, path: str, ref: str) -> str:
     """Bitbucket file resource."""
     return _bitbucket().get_file(project=project, repo=repo, path=path, at=ref)
+
+
+@mcp.resource("zephyr://cycle/{cycle_key}")
+def zephyr_cycle_resource(cycle_key: str) -> str:
+    """Zephyr test cycle resource."""
+    return _json(_zephyr().export_cycle_cases(cycle_key=cycle_key))
+
+
+@mcp.resource("zephyr://testcase/{case_key}")
+def zephyr_testcase_resource(case_key: str) -> str:
+    """Zephyr testcase resource."""
+    return _json(_zephyr().get_test_case_details(case_key=case_key))
 
 
 def main() -> None:

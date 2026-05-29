@@ -5,6 +5,7 @@ from typing import Any
 from sberworks_mcp.clients.bitbucket import BitbucketClient
 from sberworks_mcp.clients.confluence import ConfluenceClient
 from sberworks_mcp.clients.jira import JiraClient
+from sberworks_mcp.clients.zephyr import ZephyrClient
 
 
 class FakeResponse:
@@ -142,3 +143,104 @@ def test_bitbucket_create_pull_request_payload() -> None:
     assert payload["fromRef"]["id"] == "refs/heads/feature"
     assert payload["toRef"]["id"] == "refs/heads/develop"
     assert payload["fromRef"]["repository"]["project"]["key"] == "PRJ"
+
+
+def test_zephyr_exports_cycle_case_details_from_atm_latest() -> None:
+    session = FakeSession(
+        [
+            FakeResponse(
+                {
+                    "id": 78,
+                    "key": "MTRAVEL-C78",
+                    "projectId": 10001,
+                    "projectKey": "MTRAVEL",
+                    "name": "Regression",
+                    "testCaseCount": 2,
+                    "status": {"name": "Active"},
+                    "folder": {"fullName": "web/regression"},
+                    "items": [
+                        {"testCaseKey": "MTRAVEL-T1"},
+                        {"testCaseKey": "MTRAVEL-T2"},
+                        {"testCaseKey": "MTRAVEL-T1"},
+                    ],
+                }
+            ),
+            FakeResponse({"id": 1, "key": "MTRAVEL-T1", "projectId": 10001, "name": "Login", "priorityId": 10}),
+            FakeResponse({"id": 2, "key": "MTRAVEL-T2", "projectId": 10001, "name": "Search", "statusId": 20}),
+            FakeResponse(
+                {
+                    "id": 1,
+                    "key": "MTRAVEL-T1",
+                    "projectId": 10001,
+                    "projectKey": "MTRAVEL",
+                    "name": "Login",
+                    "objective": "Check login",
+                    "precondition": "User exists",
+                    "folder": {"fullName": "web/auth"},
+                    "status": {"name": "Ready"},
+                    "priority": {"name": "High"},
+                    "testScript": {
+                        "stepByStepScript": {
+                            "steps": [
+                                {
+                                    "index": 2,
+                                    "id": 12,
+                                    "text": "Submit form",
+                                    "expectedResult": "User is logged in",
+                                    "testData": '<a href="../rest/tests/1.0/attachment/file/42">file</a>',
+                                },
+                                {
+                                    "index": 1,
+                                    "id": 11,
+                                    "description": "Open login page",
+                                    "expectedResult": "Form is visible",
+                                },
+                            ]
+                        }
+                    },
+                }
+            ),
+            FakeResponse(
+                {
+                    "id": 2,
+                    "issueKey": "MTRAVEL-T2",
+                    "projectId": 10001,
+                    "projectKey": "MTRAVEL",
+                    "name": "Search",
+                    "testScript": {"steps": [{"index": 1, "text": "Search", "expectedResult": "Results"}]},
+                }
+            ),
+        ]
+    )
+    client = ZephyrClient("https://jira.example.com", session, 30)
+
+    export = client.export_cycle_case_details("MTRAVEL-C78")
+
+    assert export["cycle"]["key"] == "MTRAVEL-C78"
+    assert export["cycle"]["status_name"] == "Active"
+    assert export["case_keys"] == ["MTRAVEL-T1", "MTRAVEL-T2"]
+    assert export["cases"][0]["priority_id"] == 10
+    assert export["detailed_cases"][0]["precondition"] == "User exists"
+    assert export["detailed_cases"][0]["steps"][0]["action_text"] == "Open login page"
+    assert export["detailed_cases"][0]["steps"][1]["attachment_refs"] == ["../rest/tests/1.0/attachment/file/42"]
+    assert session.calls[0][1] == "https://jira.example.com/rest/atm/latest/testrun/MTRAVEL-C78"
+    assert session.calls[1][1] == "https://jira.example.com/rest/atm/latest/testcase/MTRAVEL-T1"
+    assert session.calls[2][1] == "https://jira.example.com/rest/atm/latest/testcase/MTRAVEL-T2"
+
+
+def test_zephyr_probe_reports_endpoint_status() -> None:
+    session = FakeSession(
+        [
+            FakeResponse({"items": [{"testCaseKey": "MTRAVEL-T1"}]}),
+            FakeResponse("<html>cycle</html>", content_type="text/html"),
+            FakeResponse({"key": "MTRAVEL-C78"}),
+            FakeResponse({"key": "MTRAVEL-T1"}),
+        ]
+    )
+    client = ZephyrClient("https://jira.example.com", session, 30)
+
+    results = client.probe_cycle_endpoints(project_id=10001, cycle_key="MTRAVEL-C78")
+
+    assert [item["name"] for item in results] == ["cycle_page", "testrun_latest", "testcase_latest"]
+    assert all(item["ok"] for item in results)
+    assert results[0]["project_id"] == 10001

@@ -20,7 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-sberworks-mcp = "sberworks_mcp.server:main"
+sberworks-mcp = "sberworks_mcp.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

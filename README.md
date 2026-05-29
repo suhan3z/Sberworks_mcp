@@ -2,44 +2,178 @@
 
 Local stdio MCP server for Jira, Confluence and Bitbucket Server/Data Center.
 
-## Setup
+## Prerequisites
+
+- Python 3.11 or newer.
+- `uv` is recommended for day-to-day setup.
+- `openssl` is required only when `CLIENT_P12_PATH` is configured.
+
+The server is cross-platform and supports Windows, macOS and Linux. MCP clients can start it from any working directory when you use the generated config snippets.
+
+## Quick Start With uv
+
+PowerShell:
 
 ```powershell
-cd C:\Work\Sberworks-mcp
-python -m pip install -e ".[dev]"
-Copy-Item .env.example .env
+cd path\to\sberworks-mcp
+uv run sberworks-mcp init
+uv run sberworks-mcp doctor
+uv run sberworks-mcp config-snippet --client claude
 ```
 
-Fill `.env` or pass the same variables from your MCP client:
+bash/zsh:
+
+```bash
+cd /path/to/sberworks-mcp
+uv run sberworks-mcp init
+uv run sberworks-mcp doctor
+uv run sberworks-mcp config-snippet --client claude
+```
+
+If `uv` is not installed, use the fallback below.
+
+## Fallback With venv and pip
+
+PowerShell:
+
+```powershell
+cd path\to\sberworks-mcp
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -e ".[dev]"
+.\.venv\Scripts\sberworks-mcp init
+.\.venv\Scripts\sberworks-mcp doctor
+.\.venv\Scripts\sberworks-mcp config-snippet --client claude
+```
+
+bash/zsh:
+
+```bash
+cd /path/to/sberworks-mcp
+python3 -m venv .venv
+./.venv/bin/python -m pip install -e ".[dev]"
+./.venv/bin/sberworks-mcp init
+./.venv/bin/sberworks-mcp doctor
+./.venv/bin/sberworks-mcp config-snippet --client claude
+```
+
+## First Run
+
+Run the setup helper:
+
+```powershell
+sberworks-mcp init
+```
+
+`init` creates only a local `.env` file. It does not edit Claude, Codex, VS Code or other client configuration files. Existing `.env` files are not overwritten unless you pass `--force`.
+
+Validate the result:
+
+```powershell
+sberworks-mcp doctor
+```
+
+Generate a client config snippet:
+
+```powershell
+sberworks-mcp config-snippet --client claude
+sberworks-mcp config-snippet --client codex
+sberworks-mcp config-snippet --client vscode
+```
+
+The snippets use:
+
+- an absolute Python executable path as `command`;
+- `args = ["-m", "sberworks_mcp"]`;
+- an absolute `SBERWORKS_MCP_ENV_FILE` path.
+
+This avoids the common MCP issue where a desktop client launches the server from an unexpected working directory or with a minimal inherited environment.
+
+## Client Configuration
+
+### Claude Desktop
+
+Generate:
+
+```powershell
+sberworks-mcp config-snippet --client claude
+```
+
+Paste the JSON under the top-level config object.
+
+Config path:
+
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Linux: Claude Desktop may not have an official Linux build; use Claude Code, Codex or VS Code snippets instead.
+
+Restart Claude Desktop after editing the config.
+
+### Codex
+
+Generate:
+
+```powershell
+sberworks-mcp config-snippet --client codex
+```
+
+Add the TOML block to your Codex config, usually `~/.codex/config.toml`.
+
+### VS Code
+
+Generate:
+
+```powershell
+sberworks-mcp config-snippet --client vscode
+```
+
+Use the output in `.vscode/mcp.json` or the user-level MCP config. VS Code uses a top-level `servers` object, not `mcpServers`.
+
+## Run Manually
+
+For normal MCP client usage, the client starts the server. For a manual stdio launch:
+
+```powershell
+sberworks-mcp
+```
+
+or:
+
+```powershell
+sberworks-mcp serve
+```
+
+`python -m sberworks_mcp` is also supported.
+
+## Environment
+
+Required:
 
 - `JIRA_BASE_URL`
 - `CONFLUENCE_BASE_URL`
 - `BITBUCKET_BASE_URL`
 - `AUTH_USERNAME`
 - `AUTH_PASSWORD`
-- `BITBUCKET_SERVER_BEARER_TOKEN`
-- `REQUESTS_CA_BUNDLE`
-- `CLIENT_P12_PATH`
-- `CLIENT_P12_PASSWORD`
 
-Write tools are disabled by default. Enable them explicitly:
+Zephyr methods use `JIRA_BASE_URL` and the same Jira authentication. They target the `/rest/atm/latest` API namespace.
+
+Optional:
+
+- `BITBUCKET_SERVER_BEARER_TOKEN`: takes precedence for Bitbucket auth.
+- `REQUESTS_CA_BUNDLE`: corporate CA bundle path.
+- `CLIENT_P12_PATH` and `CLIENT_P12_PASSWORD`: client certificate in P12 format.
+- `SBERWORKS_MCP_ENABLE_WRITES`: defaults to `false`.
+- `SBERWORKS_MCP_TIMEOUT_SECONDS`: defaults to `30`.
+
+Write tools are disabled by default. Enable them explicitly only after read-only tools work:
 
 ```powershell
 $env:SBERWORKS_MCP_ENABLE_WRITES = "true"
 ```
 
-## Run
+or set it in `.env`:
 
-Preferred command when `uv` is installed:
-
-```powershell
-uv run sberworks-mcp
-```
-
-Fallback:
-
-```powershell
-python -m sberworks_mcp
+```dotenv
+SBERWORKS_MCP_ENABLE_WRITES=true
 ```
 
 ## Tools
@@ -74,11 +208,35 @@ Bitbucket:
 - `bitbucket_add_pr_comment`
 - `bitbucket_create_pull_request`
 
+Zephyr:
+
+- `zephyr_get_cycle`
+- `zephyr_get_cycle_case_keys`
+- `zephyr_get_test_case`
+- `zephyr_get_test_cases`
+- `zephyr_get_test_case_details`
+- `zephyr_export_cycle_cases`
+- `zephyr_export_cycle_case_details`
+- `zephyr_probe_cycle_endpoints`
+
 ## Resources
 
 - `jira://issue/{key}`
 - `confluence://page/{page_id}`
 - `bitbucket://projects/{project}/repos/{repo}/files/{path}?at={ref}`
+- `zephyr://cycle/{cycle_key}`
+- `zephyr://testcase/{case_key}`
+
+## Troubleshooting
+
+- Run `sberworks-mcp doctor --env-file /absolute/path/to/.env`.
+- Use absolute paths in MCP client configs and `.env` file references.
+- Do not write MCP protocol logs to stdout in server mode; stdout is reserved for JSON-RPC.
+- Check client logs when a server does not appear.
+  - Claude Desktop Windows logs: `%APPDATA%\Claude\logs`
+  - Claude Desktop macOS logs: `~/Library/Logs/Claude`
+- Test with MCP Inspector when a client cannot connect.
+- If `CLIENT_P12_PATH` is set, make sure `openssl` is available in `PATH`.
 
 ## Tests
 
