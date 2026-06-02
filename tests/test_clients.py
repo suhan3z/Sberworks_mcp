@@ -167,6 +167,19 @@ def test_bitbucket_create_repo_payload() -> None:
     }
 
 
+def test_bitbucket_put_file_payload() -> None:
+    session = FakeSession([FakeResponse({"id": "abc"})])
+    client = BitbucketClient("https://git.example.com/bitbucket", session, 30)
+
+    result = client.put_file("PRJ", "repo", "src/main.py", "print('ok')\n", "main", "Add file")
+
+    assert result["id"] == "abc"
+    assert session.calls[0][0] == "PUT"
+    assert session.calls[0][1].endswith("/rest/api/1.0/projects/PRJ/repos/repo/browse/src/main.py")
+    assert session.calls[0][2]["data"] == {"branch": "main", "message": "Add file"}
+    assert session.calls[0][2]["files"] == {"content": (None, "print('ok')\n")}
+
+
 def test_bitbucket_create_pull_request_payload() -> None:
     session = FakeSession([FakeResponse({"id": 9})])
     client = BitbucketClient("https://git.example.com/bitbucket", session, 30)

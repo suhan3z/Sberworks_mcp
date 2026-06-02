@@ -257,6 +257,31 @@ def bitbucket_get_file(project: str, repo: str, path: str, at: str | None = None
 
 
 @mcp.tool()
+def bitbucket_put_file(
+    project: str,
+    repo: str,
+    path: str,
+    content: str,
+    branch: str,
+    message: str,
+    source_branch: str | None = None,
+    source_commit_id: str | None = None,
+) -> dict[str, Any]:
+    """Create or update a Bitbucket file. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+    _require_writes()
+    return _bitbucket().put_file(
+        project=project,
+        repo=repo,
+        path=path,
+        content=content,
+        branch=branch,
+        message=message,
+        source_branch=source_branch,
+        source_commit_id=source_commit_id,
+    )
+
+
+@mcp.tool()
 def bitbucket_add_pr_comment(project: str, repo: str, pull_request_id: int, text: str) -> dict[str, Any]:
     """Add a Bitbucket pull request comment. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
     _require_writes()

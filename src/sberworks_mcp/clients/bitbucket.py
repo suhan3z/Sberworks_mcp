@@ -71,6 +71,33 @@ class BitbucketClient(AtlassianClient):
         encoded_path = quote(path.strip("/"), safe="/")
         return self.request("GET", f"{self._repo_path(project, repo)}/raw/{encoded_path}", params=params)
 
+    def put_file(
+        self,
+        project: str,
+        repo: str,
+        path: str,
+        content: str,
+        branch: str,
+        message: str,
+        source_branch: str | None = None,
+        source_commit_id: str | None = None,
+    ) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "branch": branch,
+            "message": message,
+        }
+        if source_branch:
+            data["sourceBranch"] = source_branch
+        if source_commit_id:
+            data["sourceCommitId"] = source_commit_id
+        encoded_path = quote(path.strip("/"), safe="/")
+        return self.request(
+            "PUT",
+            f"{self._repo_path(project, repo)}/browse/{encoded_path}",
+            data=data,
+            files={"content": (None, content)},
+        )
+
     def add_pr_comment(self, project: str, repo: str, pull_request_id: int, text: str) -> dict[str, Any]:
         return self.request(
             "POST",

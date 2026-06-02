@@ -260,6 +260,7 @@ Bitbucket:
 - `bitbucket_get_pull_request`
 - `bitbucket_get_pr_diff`
 - `bitbucket_get_file`
+- `bitbucket_put_file`
 - `bitbucket_add_pr_comment`
 - `bitbucket_create_pull_request`
 
