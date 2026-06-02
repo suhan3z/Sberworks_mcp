@@ -19,6 +19,27 @@ class BitbucketClient(AtlassianClient):
     def get_repo(self, project: str, repo: str) -> dict[str, Any]:
         return self.request("GET", self._repo_path(project, repo))
 
+    def create_repo(
+        self,
+        project: str,
+        name: str,
+        scm_id: str = "git",
+        forkable: bool = True,
+        default_branch: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "name": name,
+            "scmId": scm_id,
+            "forkable": forkable,
+        }
+        if default_branch:
+            payload["defaultBranch"] = default_branch
+        return self.request(
+            "POST",
+            f"/rest/api/1.0/projects/{quote(project, safe='')}/repos",
+            json=payload,
+        )
+
     def list_pull_requests(
         self,
         project: str,

@@ -255,6 +255,7 @@ Confluence:
 Bitbucket:
 
 - `bitbucket_get_repo`
+- `bitbucket_create_repo`
 - `bitbucket_list_pull_requests`
 - `bitbucket_get_pull_request`
 - `bitbucket_get_pr_diff`

@@ -203,6 +203,25 @@ def bitbucket_get_repo(project: str, repo: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def bitbucket_create_repo(
+    project: str,
+    name: str,
+    scm_id: str = "git",
+    forkable: bool = True,
+    default_branch: str | None = None,
+) -> dict[str, Any]:
+    """Create a Bitbucket repository in a project. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+    _require_writes()
+    return _bitbucket().create_repo(
+        project=project,
+        name=name,
+        scm_id=scm_id,
+        forkable=forkable,
+        default_branch=default_branch,
+    )
+
+
+@mcp.tool()
 def bitbucket_list_pull_requests(
     project: str,
     repo: str,

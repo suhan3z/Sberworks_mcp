@@ -150,6 +150,23 @@ def test_bitbucket_file_and_pr_comment_paths() -> None:
     assert session.calls[1][2]["json"] == {"text": "review"}
 
 
+def test_bitbucket_create_repo_payload() -> None:
+    session = FakeSession([FakeResponse({"slug": "repo"})])
+    client = BitbucketClient("https://git.example.com/bitbucket", session, 30)
+
+    result = client.create_repo("PRJ", "repo", forkable=False, default_branch="main")
+
+    assert result["slug"] == "repo"
+    assert session.calls[0][0] == "POST"
+    assert session.calls[0][1] == "https://git.example.com/bitbucket/rest/api/1.0/projects/PRJ/repos"
+    assert session.calls[0][2]["json"] == {
+        "name": "repo",
+        "scmId": "git",
+        "forkable": False,
+        "defaultBranch": "main",
+    }
+
+
 def test_bitbucket_create_pull_request_payload() -> None:
     session = FakeSession([FakeResponse({"id": 9})])
     client = BitbucketClient("https://git.example.com/bitbucket", session, 30)
