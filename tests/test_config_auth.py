@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -67,25 +66,33 @@ def test_missing_ca_bundle_fails_fast(tmp_path: Path) -> None:
         SessionFactory(_settings(requests_ca_bundle=str(tmp_path / "missing.pem"))).create(service="jira")
 
 
-def test_p12_conversion_uses_openssl(
+def test_p12_conversion_uses_cryptography(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     p12 = tmp_path / "client.p12"
     p12.write_bytes(b"fake")
     cache_dir = tmp_path / "cache"
-    calls: list[list[str]] = []
 
-    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        calls.append(args)
-        out_path = Path(args[args.index("-out") + 1])
-        out_path.write_text("pem", encoding="utf-8")
-        assert kwargs["check"] is True
-        assert kwargs["capture_output"] is True
-        return subprocess.CompletedProcess(args, 0)
+    class FakeCertificate:
+        def public_bytes(self, encoding: object) -> bytes:
+            del encoding
+            return b"cert-pem"
 
-    monkeypatch.setattr("sberworks_mcp.auth.shutil.which", lambda name: "openssl")
-    monkeypatch.setattr("sberworks_mcp.auth.subprocess.run", fake_run)
+    class FakePrivateKey:
+        def private_bytes(self, encoding: object, format: object, encryption_algorithm: object) -> bytes:
+            del encoding, format, encryption_algorithm
+            return b"key-pem"
+
+    def fake_load_key_and_certificates(payload: bytes, password: bytes):
+        assert payload == b"fake"
+        assert password == b"secret"
+        return FakePrivateKey(), FakeCertificate(), []
+
+    monkeypatch.setattr(
+        "sberworks_mcp.auth.pkcs12.load_key_and_certificates",
+        fake_load_key_and_certificates,
+    )
 
     cert_pair = SessionFactory(
         _settings(client_p12_path=str(p12), client_p12_password="secret"),
@@ -93,9 +100,8 @@ def test_p12_conversion_uses_openssl(
     ).ensure_pem_pair()
 
     assert cert_pair == (str(cache_dir / "client.crt.pem"), str(cache_dir / "client.key.pem"))
-    assert len(calls) == 2
-    assert "-clcerts" in calls[0]
-    assert "-nocerts" in calls[1]
+    assert (cache_dir / "client.crt.pem").read_bytes() == b"cert-pem"
+    assert (cache_dir / "client.key.pem").read_bytes() == b"key-pem"
 
 
 def test_write_guard_requires_explicit_enable() -> None:

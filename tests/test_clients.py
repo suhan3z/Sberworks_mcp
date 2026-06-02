@@ -114,6 +114,24 @@ def test_confluence_create_page_payload() -> None:
     assert payload["body"]["storage"]["value"] == "<p>Body</p>"
 
 
+def test_confluence_spaces_and_search_are_paginated() -> None:
+    session = FakeSession([FakeResponse({"results": []}), FakeResponse({"results": []})])
+    client = ConfluenceClient("https://wiki.example.com", session, 30)
+
+    client.get_spaces(limit=10, start=20)
+    client.search("type=page", limit=50, start=100, expand="space")
+
+    assert session.calls[0][1] == "https://wiki.example.com/rest/api/space"
+    assert session.calls[0][2]["params"] == {"limit": 10, "start": 20}
+    assert session.calls[1][1] == "https://wiki.example.com/rest/api/content/search"
+    assert session.calls[1][2]["params"] == {
+        "cql": "type=page",
+        "limit": 50,
+        "start": 100,
+        "expand": "space",
+    }
+
+
 def test_bitbucket_file_and_pr_comment_paths() -> None:
     session = FakeSession(
         [

@@ -5,10 +5,10 @@ import getpass
 import importlib.metadata
 import json
 import platform
-import shutil
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from dotenv import dotenv_values
@@ -68,6 +68,17 @@ def _build_parser() -> argparse.ArgumentParser:
     snippet_parser.add_argument("--client", choices=("claude", "codex", "vscode"), required=True)
     snippet_parser.add_argument("--env-file", default=".env", help="Env file path to reference. Defaults to .env.")
     snippet_parser.add_argument("--name", default="sberworks", help="MCP server name. Defaults to sberworks.")
+    snippet_parser.add_argument(
+        "--runtime",
+        choices=("local", "docker"),
+        default="local",
+        help="Runtime used by the MCP client. Defaults to local Python.",
+    )
+    snippet_parser.add_argument(
+        "--image",
+        default="sberworks-mcp:local",
+        help="Docker image name for --runtime docker. Defaults to sberworks-mcp:local.",
+    )
 
     return parser
 
@@ -267,6 +278,12 @@ def _check_distribution(report: DoctorReport) -> None:
         report.errors.append("Python package `mcp` is not installed.")
     else:
         report.info.append("MCP SDK import metadata found.")
+    try:
+        importlib.metadata.version("cryptography")
+    except importlib.metadata.PackageNotFoundError:
+        report.errors.append("Python package `cryptography` is not installed.")
+    else:
+        report.info.append("Cryptography package import metadata found.")
 
 
 def _resolve_env_file(env_file: Path | None) -> Path | None:
@@ -314,8 +331,6 @@ def _check_env_values(report: DoctorReport, values: dict[str, str | None]) -> No
     _check_existing_path(report, p12_path, "CLIENT_P12_PATH")
     if p12_path and not p12_password:
         report.errors.append("CLIENT_P12_PASSWORD is required when CLIENT_P12_PATH is set.")
-    if p12_path and shutil.which("openssl") is None:
-        report.errors.append("CLIENT_P12_PATH is set, but openssl is not available in PATH.")
 
 
 def _valid_http_url(value: str) -> bool:
@@ -335,56 +350,113 @@ def _check_existing_path(report: DoctorReport, value: str | None, name: str) -> 
 
 
 def _config_snippet_command(args: argparse.Namespace) -> int:
-    print(build_config_snippet(client=args.client, env_file=Path(args.env_file), name=args.name))
+    print(
+        build_config_snippet(
+            client=args.client,
+            env_file=Path(args.env_file),
+            name=args.name,
+            runtime=args.runtime,
+            image=args.image,
+        )
+    )
     return 0
 
 
-def build_config_snippet(*, client: str, env_file: Path, name: str = "sberworks") -> str:
+def build_config_snippet(
+    *,
+    client: str,
+    env_file: Path,
+    name: str = "sberworks",
+    runtime: str = "local",
+    image: str = "sberworks-mcp:local",
+) -> str:
     env_path = str(env_file.expanduser().resolve())
-    python_path = str(Path(sys.executable).resolve())
-    args = ["-m", "sberworks_mcp"]
+    if runtime == "local":
+        command = str(Path(sys.executable).resolve())
+        snippet_args = ["-m", "sberworks_mcp"]
+        snippet_env = {"SBERWORKS_MCP_ENV_FILE": env_path}
+    elif runtime == "docker":
+        command = "docker"
+        snippet_args = _docker_run_args(env_file=env_file, image=image)
+        snippet_env = None
+    else:
+        raise ValueError(f"Unsupported runtime: {runtime}")
 
     if client == "claude":
+        server: dict[str, Any] = {
+            "command": command,
+            "args": snippet_args,
+        }
+        if snippet_env is not None:
+            server["env"] = snippet_env
         payload = {
             "mcpServers": {
-                name: {
-                    "command": python_path,
-                    "args": args,
-                    "env": {"SBERWORKS_MCP_ENV_FILE": env_path},
-                }
+                name: server
             }
         }
         return json.dumps(payload, ensure_ascii=False, indent=2)
     if client == "vscode":
+        server = {
+            "type": "stdio",
+            "command": command,
+            "args": snippet_args,
+        }
+        if snippet_env is not None:
+            server["env"] = snippet_env
         payload = {
             "servers": {
-                name: {
-                    "type": "stdio",
-                    "command": python_path,
-                    "args": args,
-                    "env": {"SBERWORKS_MCP_ENV_FILE": env_path},
-                }
+                name: server
             }
         }
         return json.dumps(payload, ensure_ascii=False, indent=2)
     if client == "codex":
-        return "\n".join(
-            [
-                f"[mcp_servers.{_toml_key(name)}]",
-                f'command = "{_toml_string(python_path)}"',
-                'args = ["-m", "sberworks_mcp"]',
-                "",
-                f"[mcp_servers.{_toml_key(name)}.env]",
-                f'SBERWORKS_MCP_ENV_FILE = "{_toml_string(env_path)}"',
-            ]
-        )
+        lines = [
+            f"[mcp_servers.{_toml_key(name)}]",
+            f'command = "{_toml_string(command)}"',
+            f"args = {_toml_array(snippet_args)}",
+        ]
+        if snippet_env is not None:
+            lines.extend(
+                [
+                    "",
+                    f"[mcp_servers.{_toml_key(name)}.env]",
+                    f'SBERWORKS_MCP_ENV_FILE = "{_toml_string(env_path)}"',
+                ]
+            )
+        return "\n".join(lines)
     raise ValueError(f"Unsupported client: {client}")
+
+
+def _docker_run_args(*, env_file: Path, image: str) -> list[str]:
+    env_path = str(env_file.expanduser().resolve())
+    env_dir = env_file.expanduser().resolve().parent
+    return [
+        "run",
+        "--rm",
+        "-i",
+        "--env-file",
+        env_path,
+        "-e",
+        "SBERWORKS_MCP_ENV_FILE=/config/.env",
+        "-v",
+        f"{env_path}:/config/.env:ro",
+        "-v",
+        f"{env_dir / 'certs'}:/certs:ro",
+        "-v",
+        f"{env_dir / 'attachments'}:/attachments:ro",
+        image,
+        "serve",
+    ]
 
 
 def _toml_key(value: str) -> str:
     if value.replace("_", "").replace("-", "").isalnum():
         return value
     return f'"{_toml_string(value)}"'
+
+
+def _toml_array(values: Sequence[str]) -> str:
+    return "[" + ", ".join(f'"{_toml_string(value)}"' for value in values) + "]"
 
 
 def _toml_string(value: str) -> str:

@@ -38,6 +38,17 @@ class JiraClient(AtlassianClient):
     def create_issue(self, fields: dict[str, Any]) -> dict[str, Any]:
         return self.request("POST", "/rest/api/2/issue", json={"fields": fields})
 
+    def add_attachment(self, key: str, file_path: str) -> dict[str, Any]:
+        headers = {"X-Atlassian-Token": "no-check"}
+        with open(file_path, "rb") as file:
+            files = {"file": file}
+            return self.request(
+                "POST",
+                f"/rest/api/2/issue/{key}/attachments",
+                headers=headers,
+                files=files,
+            )
+
     def update_issue_fields(self, key: str, fields: dict[str, Any]) -> dict[str, Any]:
         return self.request("PUT", f"/rest/api/2/issue/{key}", json={"fields": fields})
 

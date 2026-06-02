@@ -1,3 +1,6 @@
+.git/
+.gitignore
+.dockerignore
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -12,3 +15,11 @@ attachments/
 certs/
 dist/
 build/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519

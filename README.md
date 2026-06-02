@@ -6,7 +6,7 @@ Local stdio MCP server for Jira, Confluence and Bitbucket Server/Data Center.
 
 - Python 3.11 or newer.
 - `uv` is recommended for day-to-day setup.
-- `openssl` is required only when `CLIENT_P12_PATH` is configured.
+- `cryptography` is used to read `CLIENT_P12_PATH`; no external OpenSSL binary is required.
 
 The server is cross-platform and supports Windows, macOS and Linux. MCP clients can start it from any working directory when you use the generated config snippets.
 
@@ -128,6 +128,59 @@ sberworks-mcp config-snippet --client vscode
 
 Use the output in `.vscode/mcp.json` or the user-level MCP config. VS Code uses a top-level `servers` object, not `mcpServers`.
 
+## Docker
+
+Build the local image:
+
+```powershell
+docker build -t sberworks-mcp:local .
+```
+
+The container runs the same stdio MCP server. For MCP clients, keep stdin open with `-i`:
+
+```powershell
+docker run --rm -i `
+  --env-file .env `
+  -e SBERWORKS_MCP_ENV_FILE=/config/.env `
+  -v ${PWD}/.env:/config/.env:ro `
+  -v ${PWD}/certs:/certs:ro `
+  -v ${PWD}/attachments:/attachments:ro `
+  sberworks-mcp:local serve
+```
+
+With Docker Compose:
+
+```powershell
+docker compose build
+docker compose run --rm -T sberworks-mcp doctor
+docker compose run --rm -T sberworks-mcp
+```
+
+Generate Docker-based client snippets:
+
+```powershell
+sberworks-mcp config-snippet --client claude --runtime docker
+sberworks-mcp config-snippet --client codex --runtime docker
+sberworks-mcp config-snippet --client vscode --runtime docker
+```
+
+Use `--image` if you built the image under another tag:
+
+```powershell
+sberworks-mcp config-snippet --client claude --runtime docker --image custom/sberworks-mcp:test
+```
+
+The generated snippets use `command = docker` and pass `run --rm -i`, `--env-file`, the `.env` mount at `/config/.env`, and read-only mounts for `/certs` and `/attachments`.
+
+When running in Docker, paths inside `.env` must be container paths. For example:
+
+```dotenv
+REQUESTS_CA_BUNDLE=/certs/ca.pem
+CLIENT_P12_PATH=/certs/client.p12
+```
+
+Do not publish local runtime files. `.env`, `certs/`, `.cert_cache/` and `attachments/` are intentionally excluded from git and the Docker build context.
+
 ## Run Manually
 
 For normal MCP client usage, the client starts the server. For a manual stdio launch:
@@ -185,6 +238,7 @@ Jira:
 - `jira_get_comments`
 - `jira_add_comment`
 - `jira_create_issue`
+- `jira_add_attachment`
 - `jira_update_issue_fields`
 - `jira_list_transitions`
 - `jira_transition_issue`
@@ -236,7 +290,7 @@ Zephyr:
   - Claude Desktop Windows logs: `%APPDATA%\Claude\logs`
   - Claude Desktop macOS logs: `~/Library/Logs/Claude`
 - Test with MCP Inspector when a client cannot connect.
-- If `CLIENT_P12_PATH` is set, make sure `openssl` is available in `PATH`.
+- If `CLIENT_P12_PATH` is set, make sure the file path is absolute for desktop MCP clients.
 
 ## Tests
 

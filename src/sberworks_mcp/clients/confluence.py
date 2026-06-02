@@ -11,8 +11,11 @@ class ConfluenceClient(AtlassianClient):
     def __init__(self, base_url: str, session: requests.Session, timeout_seconds: int) -> None:
         super().__init__(base_url, session, timeout_seconds)
 
-    def search(self, cql: str, limit: int = 25, expand: str | None = None) -> dict[str, Any]:
-        params: dict[str, Any] = {"cql": cql, "limit": limit}
+    def get_spaces(self, limit: int = 25, start: int = 0) -> dict[str, Any]:
+        return self.request("GET", "/rest/api/space", params={"limit": limit, "start": start})
+
+    def search(self, cql: str, limit: int = 25, expand: str | None = None, start: int = 0) -> dict[str, Any]:
+        params: dict[str, Any] = {"cql": cql, "limit": limit, "start": start}
         if expand:
             params["expand"] = expand
         return self.request("GET", "/rest/api/content/search", params=params)

@@ -167,5 +167,56 @@ def test_config_snippet_generates_codex_toml(tmp_path: Path) -> None:
     assert Path(server["env"]["SBERWORKS_MCP_ENV_FILE"]).is_absolute()
 
 
+def test_config_snippet_generates_claude_docker_json(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    snippet = cli.build_config_snippet(client="claude", env_file=env_file, runtime="docker")
+
+    payload = json.loads(snippet)
+    server = payload["mcpServers"]["sberworks"]
+    assert server["command"] == "docker"
+    assert "env" not in server
+    _assert_docker_args(server["args"], env_file)
+
+
+def test_config_snippet_generates_vscode_docker_json(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    snippet = cli.build_config_snippet(
+        client="vscode",
+        env_file=env_file,
+        runtime="docker",
+        image="custom/sberworks-mcp:test",
+    )
+
+    payload = json.loads(snippet)
+    server = payload["servers"]["sberworks"]
+    assert server["type"] == "stdio"
+    assert server["command"] == "docker"
+    _assert_docker_args(server["args"], env_file, image="custom/sberworks-mcp:test")
+
+
+def test_config_snippet_generates_codex_docker_toml(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    snippet = cli.build_config_snippet(client="codex", env_file=env_file, runtime="docker")
+
+    payload = tomllib.loads(snippet)
+    server = payload["mcp_servers"]["sberworks"]
+    assert server["command"] == "docker"
+    assert "env" not in server
+    _assert_docker_args(server["args"], env_file)
+
+
+def _assert_docker_args(args: list[str], env_file: Path, image: str = "sberworks-mcp:local") -> None:
+    env_path = str(env_file.resolve())
+    env_dir = env_file.resolve().parent
+    assert args[:3] == ["run", "--rm", "-i"]
+    assert args[3:5] == ["--env-file", env_path]
+    assert "-e" in args
+    assert "SBERWORKS_MCP_ENV_FILE=/config/.env" in args
+    assert f"{env_path}:/config/.env:ro" in args
+    assert f"{env_dir / 'certs'}:/certs:ro" in args
+    assert f"{env_dir / 'attachments'}:/attachments:ro" in args
+    assert args[-2:] == [image, "serve"]
+
+
 def test_config_snippet_escapes_windows_paths() -> None:
     assert cli._toml_string(r"C:\Users\me\Sberworks-mcp\.env") == r"C:\\Users\\me\\Sberworks-mcp\\.env"

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import os
-import shutil
-import subprocess
 from pathlib import Path
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.serialization import pkcs12
 import requests
 
 from sberworks_mcp.config import Settings
@@ -42,9 +41,6 @@ class SessionFactory:
         if not p12_path or not p12_password:
             return None
 
-        if shutil.which("openssl") is None:
-            raise RuntimeError("CLIENT_P12_PATH is configured, but openssl is not available in PATH")
-
         source = Path(p12_path)
         if not source.exists():
             raise FileNotFoundError(f"CLIENT_P12_PATH does not exist: {source}")
@@ -55,40 +51,19 @@ class SessionFactory:
         if crt.exists() and key.exists():
             return str(crt), str(key)
 
-        env = os.environ.copy()
-        env["P12_PASS"] = p12_password
-        subprocess.run(
-            [
-                "openssl",
-                "pkcs12",
-                "-in",
-                str(source),
-                "-clcerts",
-                "-nokeys",
-                "-out",
-                str(crt),
-                "-passin",
-                "env:P12_PASS",
-            ],
-            check=True,
-            env=env,
-            capture_output=True,
+        private_key, certificate, _additional = pkcs12.load_key_and_certificates(
+            source.read_bytes(),
+            p12_password.encode("utf-8"),
         )
-        subprocess.run(
-            [
-                "openssl",
-                "pkcs12",
-                "-in",
-                str(source),
-                "-nocerts",
-                "-nodes",
-                "-out",
-                str(key),
-                "-passin",
-                "env:P12_PASS",
-            ],
-            check=True,
-            env=env,
-            capture_output=True,
+        if private_key is None or certificate is None:
+            raise RuntimeError("CLIENT_P12_PATH does not contain both a private key and certificate")
+
+        crt.write_bytes(certificate.public_bytes(serialization.Encoding.PEM))
+        key.write_bytes(
+            private_key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.PKCS8,
+                serialization.NoEncryption(),
+            )
         )
         return str(crt), str(key)

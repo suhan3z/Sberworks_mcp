@@ -96,6 +96,13 @@ def jira_create_issue(fields: dict[str, Any]) -> dict[str, Any]:
 
 
 @mcp.tool()
+def jira_add_attachment(key: str, file_path: str) -> dict[str, Any]:
+    """Attach a local file to a Jira issue. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+    _require_writes()
+    return _jira().add_attachment(key=key, file_path=file_path)
+
+
+@mcp.tool()
 def jira_update_issue_fields(key: str, fields: dict[str, Any]) -> dict[str, Any]:
     """Update Jira issue fields. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
     _require_writes()
@@ -121,9 +128,15 @@ def jira_transition_issue(
 
 
 @mcp.tool()
-def confluence_search(cql: str, limit: int = 25, expand: str | None = None) -> dict[str, Any]:
+def confluence_get_spaces(limit: int = 25, start: int = 0) -> dict[str, Any]:
+    """List Confluence spaces."""
+    return _confluence().get_spaces(limit=limit, start=start)
+
+
+@mcp.tool()
+def confluence_search(cql: str, limit: int = 25, expand: str | None = None, start: int = 0) -> dict[str, Any]:
     """Search Confluence content using CQL."""
-    return _confluence().search(cql=cql, limit=limit, expand=expand)
+    return _confluence().search(cql=cql, limit=limit, expand=expand, start=start)
 
 
 @mcp.tool()

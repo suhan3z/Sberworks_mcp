@@ -1,0 +1,17 @@
+services:
+  sberworks-mcp:
+    build:
+      context: .
+    image: sberworks-mcp:local
+    stdin_open: true
+    tty: false
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SBERWORKS_MCP_ENV_FILE: /config/.env
+    volumes:
+      - ./.env:/config/.env:ro
+      - ./certs:/certs:ro
+      - ./attachments:/attachments:ro
+    command: ["serve"]
