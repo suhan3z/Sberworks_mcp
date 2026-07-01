@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +19,8 @@ class Settings:
     requests_ca_bundle: str | None
     client_p12_path: str | None
     client_p12_password: str | None
+    cert_cache_dir: str
+    download_dir: str
     enable_writes: bool
     timeout_seconds: int
 
@@ -67,9 +70,18 @@ def _optional(value: str | None) -> str | None:
 def load_settings(*, env_file: str | None = None, require_all: bool = False) -> Settings:
     dotenv_path = env_file or os.getenv("SBERWORKS_MCP_ENV_FILE", "").strip()
     if dotenv_path:
-        load_dotenv(dotenv_path=Path(dotenv_path), override=False)
+        env_path = Path(dotenv_path)
+        load_dotenv(dotenv_path=env_path, override=False)
     else:
+        env_path = None
         load_dotenv(override=False)
+
+    cert_cache_dir = _optional(os.getenv("SBERWORKS_MCP_CERT_CACHE_DIR"))
+    if cert_cache_dir is None:
+        cert_cache_dir = str((env_path.resolve().parent / ".cert_cache") if env_path else Path(".cert_cache"))
+    download_dir = _optional(os.getenv("SBERWORKS_MCP_DOWNLOAD_DIR"))
+    if download_dir is None:
+        download_dir = str(Path(tempfile.gettempdir()) / "sberworks-mcp-downloads")
 
     settings = Settings(
         jira_base_url=os.getenv("JIRA_BASE_URL", "").rstrip("/"),
@@ -81,6 +93,8 @@ def load_settings(*, env_file: str | None = None, require_all: bool = False) -> 
         requests_ca_bundle=_optional(os.getenv("REQUESTS_CA_BUNDLE")),
         client_p12_path=_optional(os.getenv("CLIENT_P12_PATH")),
         client_p12_password=_optional(os.getenv("CLIENT_P12_PASSWORD")),
+        cert_cache_dir=cert_cache_dir,
+        download_dir=download_dir,
         enable_writes=_truthy(os.getenv("SBERWORKS_MCP_ENABLE_WRITES")),
         timeout_seconds=int(os.getenv("SBERWORKS_MCP_TIMEOUT_SECONDS", "30")),
     )

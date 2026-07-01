@@ -20,6 +20,8 @@ def _settings(**overrides: object) -> Settings:
         requests_ca_bundle=None,
         client_p12_path=None,
         client_p12_password=None,
+        cert_cache_dir=".cert_cache",
+        download_dir="downloads",
         enable_writes=False,
         timeout_seconds=30,
     )
@@ -41,6 +43,36 @@ def test_load_settings_reports_missing_required(monkeypatch: pytest.MonkeyPatch)
 
     assert "JIRA_BASE_URL" in str(exc.value)
     assert "AUTH_PASSWORD" in str(exc.value)
+
+
+def test_cert_cache_defaults_next_to_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "JIRA_BASE_URL=https://jira.example.com",
+                "CONFLUENCE_BASE_URL=https://wiki.example.com",
+                "BITBUCKET_BASE_URL=https://git.example.com/bitbucket",
+                "AUTH_USERNAME=user",
+                "AUTH_PASSWORD=pass",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SBERWORKS_MCP_CERT_CACHE_DIR", raising=False)
+
+    settings = load_settings(env_file=str(env_file))
+
+    assert settings.cert_cache_dir == str(tmp_path / ".cert_cache")
+
+
+def test_download_dir_can_be_configured(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    download_dir = tmp_path / "downloads"
+    monkeypatch.setenv("SBERWORKS_MCP_DOWNLOAD_DIR", str(download_dir))
+
+    settings = load_settings()
+
+    assert settings.download_dir == str(download_dir)
 
 
 def test_bitbucket_bearer_token_takes_precedence() -> None:

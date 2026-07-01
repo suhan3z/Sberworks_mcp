@@ -23,7 +23,7 @@ def _jira() -> JiraClient:
     settings = _settings()
     return JiraClient(
         settings.jira_base_url,
-        SessionFactory(settings).create(service="jira"),
+        SessionFactory(settings, cache_dir=settings.cert_cache_dir).create(service="jira"),
         settings.timeout_seconds,
     )
 
@@ -32,7 +32,7 @@ def _confluence() -> ConfluenceClient:
     settings = _settings()
     return ConfluenceClient(
         settings.confluence_base_url,
-        SessionFactory(settings).create(service="confluence"),
+        SessionFactory(settings, cache_dir=settings.cert_cache_dir).create(service="confluence"),
         settings.timeout_seconds,
     )
 
@@ -41,8 +41,9 @@ def _bitbucket() -> BitbucketClient:
     settings = _settings()
     return BitbucketClient(
         settings.bitbucket_base_url,
-        SessionFactory(settings).create(service="bitbucket"),
+        SessionFactory(settings, cache_dir=settings.cert_cache_dir).create(service="bitbucket"),
         settings.timeout_seconds,
+        download_dir=settings.download_dir,
     )
 
 
@@ -50,7 +51,7 @@ def _zephyr() -> ZephyrClient:
     settings = _settings()
     return ZephyrClient(
         settings.jira_base_url,
-        SessionFactory(settings).create(service="jira"),
+        SessionFactory(settings, cache_dir=settings.cert_cache_dir).create(service="jira"),
         settings.timeout_seconds,
     )
 
@@ -64,9 +65,9 @@ def _json(data: Any) -> str:
 
 
 @mcp.tool()
-def jira_search(jql: str, max_results: int = 50, fields: str | None = None) -> dict[str, Any]:
+def jira_search(jql: str, max_results: int = 50, fields: str | None = None, start_at: int = 0) -> dict[str, Any]:
     """Search Jira issues using JQL."""
-    return _jira().search(jql=jql, max_results=max_results, fields=fields)
+    return _jira().search(jql=jql, max_results=max_results, fields=fields, start_at=start_at)
 
 
 @mcp.tool()
@@ -79,6 +80,26 @@ def jira_get_issue(key: str, fields: str | None = None, expand: str | None = Non
 def jira_get_comments(key: str, start_at: int = 0, max_results: int = 100) -> dict[str, Any]:
     """Read comments from a Jira issue."""
     return _jira().get_comments(key=key, start_at=start_at, max_results=max_results)
+
+
+@mcp.tool()
+def jira_get_remote_links(key: str) -> list[dict[str, Any]]:
+    """Read Jira remote links for an issue."""
+    return _jira().get_remote_links(key=key)
+
+
+@mcp.tool()
+def jira_get_development_details(
+    issue_id_or_key: str,
+    application_type: str = "stash",
+    data_type: str = "pullrequest",
+) -> dict[str, Any]:
+    """Read Jira development details for an issue, such as linked pull requests."""
+    return _jira().get_development_details(
+        issue_id_or_key=issue_id_or_key,
+        application_type=application_type,
+        data_type=data_type,
+    )
 
 
 @mcp.tool()
@@ -203,6 +224,12 @@ def bitbucket_get_repo(project: str, repo: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def bitbucket_list_repositories(project: str, limit: int = 25, start: int = 0) -> dict[str, Any]:
+    """List Bitbucket repositories in a project."""
+    return _bitbucket().list_repositories(project=project, limit=limit, start=start)
+
+
+@mcp.tool()
 def bitbucket_create_repo(
     project: str,
     name: str,
@@ -240,6 +267,24 @@ def bitbucket_get_pull_request(project: str, repo: str, pull_request_id: int) ->
 
 
 @mcp.tool()
+def bitbucket_find_pull_requests_by_issue_key(
+    project: str,
+    repos: list[str],
+    issue_key: str,
+    states: list[str] | None = None,
+    limit_per_repo_state: int = 100,
+) -> list[dict[str, Any]]:
+    """Find Bitbucket pull requests that mention a Jira issue key in title, description, or branch refs."""
+    return _bitbucket().find_pull_requests_by_issue_key(
+        project=project,
+        repos=repos,
+        issue_key=issue_key,
+        states=states,
+        limit_per_repo_state=limit_per_repo_state,
+    )
+
+
+@mcp.tool()
 def bitbucket_get_pr_diff(project: str, repo: str, pull_request_id: int, context_lines: int = 10) -> Any:
     """Read a Bitbucket pull request diff."""
     return _bitbucket().get_pr_diff(
@@ -254,6 +299,28 @@ def bitbucket_get_pr_diff(project: str, repo: str, pull_request_id: int, context
 def bitbucket_get_file(project: str, repo: str, path: str, at: str | None = None) -> str:
     """Read a file from Bitbucket."""
     return _bitbucket().get_file(project=project, repo=repo, path=path, at=at)
+
+
+@mcp.tool()
+def bitbucket_download_file(
+    project: str,
+    repo: str,
+    path: str,
+    at: str | None = None,
+    output_path: str | None = None,
+    output_dir: str | None = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Download a Bitbucket file to local disk and return metadata."""
+    return _bitbucket().download_file(
+        project=project,
+        repo=repo,
+        path=path,
+        at=at,
+        output_path=output_path,
+        output_dir=output_dir,
+        overwrite=overwrite,
+    )
 
 
 @mcp.tool()

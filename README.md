@@ -214,6 +214,8 @@ Optional:
 - `BITBUCKET_SERVER_BEARER_TOKEN`: takes precedence for Bitbucket auth.
 - `REQUESTS_CA_BUNDLE`: corporate CA bundle path.
 - `CLIENT_P12_PATH` and `CLIENT_P12_PASSWORD`: client certificate in P12 format.
+- `SBERWORKS_MCP_CERT_CACHE_DIR`: directory for converted PEM certificate files. Defaults to `.cert_cache` next to `SBERWORKS_MCP_ENV_FILE`, so desktop clients can start the MCP server from any working directory.
+- `SBERWORKS_MCP_DOWNLOAD_DIR`: default directory for `bitbucket_download_file`. Defaults to the system temp directory under `sberworks-mcp-downloads`.
 - `SBERWORKS_MCP_ENABLE_WRITES`: defaults to `false`.
 - `SBERWORKS_MCP_TIMEOUT_SECONDS`: defaults to `30`.
 
@@ -236,6 +238,8 @@ Jira:
 - `jira_search`
 - `jira_get_issue`
 - `jira_get_comments`
+- `jira_get_remote_links`
+- `jira_get_development_details`
 - `jira_add_comment`
 - `jira_create_issue`
 - `jira_add_attachment`
@@ -255,11 +259,14 @@ Confluence:
 Bitbucket:
 
 - `bitbucket_get_repo`
+- `bitbucket_list_repositories`
 - `bitbucket_create_repo`
 - `bitbucket_list_pull_requests`
 - `bitbucket_get_pull_request`
+- `bitbucket_find_pull_requests_by_issue_key`
 - `bitbucket_get_pr_diff`
 - `bitbucket_get_file`
+- `bitbucket_download_file`
 - `bitbucket_put_file`
 - `bitbucket_add_pr_comment`
 - `bitbucket_create_pull_request`

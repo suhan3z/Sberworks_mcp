@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from sberworks_mcp.clients.bitbucket import BitbucketClient
@@ -9,16 +10,31 @@ from sberworks_mcp.clients.zephyr import ZephyrClient
 
 
 class FakeResponse:
-    def __init__(self, payload: Any, status_code: int = 200, content_type: str = "application/json") -> None:
+    def __init__(
+        self,
+        payload: Any,
+        status_code: int = 200,
+        content_type: str = "application/json",
+        headers: dict[str, str] | None = None,
+    ) -> None:
         self.payload = payload
         self.status_code = status_code
         self.ok = status_code < 400
-        self.headers = {"Content-Type": content_type}
-        self.text = str(payload)
-        self.content = b"x"
+        self.headers = {"Content-Type": content_type, **(headers or {})}
+        self.content = payload if isinstance(payload, bytes) else b"x"
+        self.text = payload.decode("utf-8", errors="replace") if isinstance(payload, bytes) else str(payload)
+        self.closed = False
 
     def json(self) -> Any:
         return self.payload
+
+    def iter_content(self, chunk_size: int):
+        content = self.content
+        for index in range(0, len(content), chunk_size):
+            yield content[index : index + chunk_size]
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class FakeSession:
@@ -35,14 +51,55 @@ def test_jira_search_and_comment_payloads() -> None:
     session = FakeSession([FakeResponse({"issues": []}), FakeResponse({"id": "10001"})])
     client = JiraClient("https://jira.example.com", session, 30)
 
-    assert client.search("project = TST", max_results=10)["issues"] == []
+    assert client.search("project = TST", max_results=10, start_at=20)["issues"] == []
     assert client.add_comment("TST-1", "hello")["id"] == "10001"
 
     assert session.calls[0][0] == "GET"
     assert session.calls[0][1] == "https://jira.example.com/rest/api/2/search"
     assert session.calls[0][2]["params"]["jql"] == "project = TST"
+    assert session.calls[0][2]["params"]["startAt"] == 20
     assert session.calls[1][0] == "POST"
     assert session.calls[1][2]["json"] == {"body": "hello"}
+
+
+def test_jira_remote_links_path() -> None:
+    session = FakeSession([FakeResponse([{"object": {"url": "https://git/pr/1"}}])])
+    client = JiraClient("https://jira.example.com", session, 30)
+
+    assert client.get_remote_links("TST-1") == [{"object": {"url": "https://git/pr/1"}}]
+    assert session.calls[0][0] == "GET"
+    assert session.calls[0][1] == "https://jira.example.com/rest/api/2/issue/TST-1/remotelink"
+
+
+def test_jira_development_details_resolves_issue_key_to_id() -> None:
+    session = FakeSession(
+        [
+            FakeResponse({"id": "10001", "key": "TST-1"}),
+            FakeResponse({"detail": [{"pullRequests": [{"id": 7}]}]}),
+        ]
+    )
+    client = JiraClient("https://jira.example.com", session, 30)
+
+    result = client.get_development_details("TST-1")
+
+    assert result["detail"][0]["pullRequests"][0]["id"] == 7
+    assert session.calls[0][1] == "https://jira.example.com/rest/api/2/issue/TST-1"
+    assert session.calls[0][2]["params"] == {"fields": "summary"}
+    assert session.calls[1][1] == "https://jira.example.com/rest/dev-status/1.0/issue/detail"
+    assert session.calls[1][2]["params"] == {
+        "issueId": "10001",
+        "applicationType": "stash",
+        "dataType": "pullrequest",
+    }
+
+
+def test_jira_development_details_accepts_numeric_issue_id() -> None:
+    session = FakeSession([FakeResponse({"detail": []})])
+    client = JiraClient("https://jira.example.com", session, 30)
+
+    assert client.get_development_details("10001") == {"detail": []}
+    assert len(session.calls) == 1
+    assert session.calls[0][2]["params"]["issueId"] == "10001"
 
 
 def test_jira_transition_payload() -> None:
@@ -150,6 +207,73 @@ def test_bitbucket_file_and_pr_comment_paths() -> None:
     assert session.calls[1][2]["json"] == {"text": "review"}
 
 
+def test_bitbucket_download_file_streams_to_output_path(tmp_path) -> None:
+    payload = b"abcdef"
+    response = FakeResponse(
+        payload,
+        content_type="application/octet-stream",
+        headers={"ETag": '"abc"', "Last-Modified": "Fri, 19 Jun 2026 10:00:00 GMT"},
+    )
+    session = FakeSession([response])
+    client = BitbucketClient("https://git.example.com/bitbucket", session, 30)
+    target = tmp_path / "download.snapshot"
+
+    result = client.download_file(
+        project="PRJ",
+        repo="repo",
+        path="snapshots/prod/download.snapshot",
+        at="develop",
+        output_path=str(target),
+    )
+
+    assert target.read_bytes() == payload
+    assert result == {
+        "path": str(target.resolve()),
+        "bytes": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "project": "PRJ",
+        "repo": "repo",
+        "source_path": "snapshots/prod/download.snapshot",
+        "at": "develop",
+        "content_type": "application/octet-stream",
+        "etag": '"abc"',
+        "last_modified": "Fri, 19 Jun 2026 10:00:00 GMT",
+    }
+    assert response.closed is True
+    assert session.calls[0][0] == "GET"
+    assert session.calls[0][1].endswith("/rest/api/1.0/projects/PRJ/repos/repo/raw/snapshots/prod/download.snapshot")
+    assert session.calls[0][2]["params"] == {"at": "develop"}
+    assert session.calls[0][2]["stream"] is True
+    assert session.calls[0][2]["timeout"] == 30
+
+
+def test_bitbucket_download_file_uses_output_dir_and_refuses_overwrite(tmp_path) -> None:
+    target = tmp_path / "download.snapshot"
+    target.write_bytes(b"existing")
+    client = BitbucketClient("https://git.example.com/bitbucket", FakeSession([]), 30)
+
+    try:
+        client.download_file("PRJ", "repo", "snapshots/prod/download.snapshot", output_dir=str(tmp_path))
+    except FileExistsError as exc:
+        assert str(target) in str(exc)
+    else:
+        raise AssertionError("download_file should refuse to overwrite existing files by default")
+
+    session = FakeSession([FakeResponse(b"new", content_type="application/octet-stream")])
+    client = BitbucketClient("https://git.example.com/bitbucket", session, 30)
+    result = client.download_file(
+        "PRJ",
+        "repo",
+        "snapshots/prod/download.snapshot",
+        output_dir=str(tmp_path),
+        overwrite=True,
+    )
+
+    assert target.read_bytes() == b"new"
+    assert result["path"] == str(target.resolve())
+    assert result["bytes"] == 3
+
+
 def test_bitbucket_create_repo_payload() -> None:
     session = FakeSession([FakeResponse({"slug": "repo"})])
     client = BitbucketClient("https://git.example.com/bitbucket", session, 30)
@@ -165,6 +289,18 @@ def test_bitbucket_create_repo_payload() -> None:
         "forkable": False,
         "defaultBranch": "main",
     }
+
+
+def test_bitbucket_list_repositories_path_and_pagination() -> None:
+    session = FakeSession([FakeResponse({"values": [{"slug": "repo"}]})])
+    client = BitbucketClient("https://git.example.com/bitbucket", session, 30)
+
+    result = client.list_repositories("PRJ", limit=50, start=100)
+
+    assert result["values"][0]["slug"] == "repo"
+    assert session.calls[0][0] == "GET"
+    assert session.calls[0][1] == "https://git.example.com/bitbucket/rest/api/1.0/projects/PRJ/repos"
+    assert session.calls[0][2]["params"] == {"limit": 50, "start": 100}
 
 
 def test_bitbucket_put_file_payload() -> None:
@@ -191,6 +327,58 @@ def test_bitbucket_create_pull_request_payload() -> None:
     assert payload["fromRef"]["id"] == "refs/heads/feature"
     assert payload["toRef"]["id"] == "refs/heads/develop"
     assert payload["fromRef"]["repository"]["project"]["key"] == "PRJ"
+
+
+def test_bitbucket_find_pull_requests_by_issue_key_scans_refs_and_states() -> None:
+    session = FakeSession(
+        [
+            FakeResponse(
+                {
+                    "values": [
+                        {
+                            "id": 1,
+                            "title": "Feature TST-42",
+                            "description": "",
+                            "fromRef": {"displayId": "feature/no-key", "id": "refs/heads/feature/no-key"},
+                        },
+                        {
+                            "id": 2,
+                            "title": "Other",
+                            "description": "",
+                            "fromRef": {"displayId": "feature/other", "id": "refs/heads/feature/other"},
+                        },
+                    ],
+                    "isLastPage": True,
+                }
+            ),
+            FakeResponse(
+                {
+                    "values": [
+                        {
+                            "id": 3,
+                            "title": "Other",
+                            "description": "",
+                            "fromRef": {"displayId": "feature/TST-42", "id": "refs/heads/feature/TST-42"},
+                        },
+                    ],
+                    "isLastPage": True,
+                }
+            ),
+        ]
+    )
+    client = BitbucketClient("https://git.example.com/bitbucket", session, 30)
+
+    matches = client.find_pull_requests_by_issue_key(
+        project="PRJ",
+        repos=["repo"],
+        issue_key="TST-42",
+        states=["OPEN", "MERGED"],
+    )
+
+    assert [item["id"] for item in matches] == [1, 3]
+    assert matches[0]["repositorySlug"] == "repo"
+    assert session.calls[0][2]["params"]["state"] == "OPEN"
+    assert session.calls[1][2]["params"]["state"] == "MERGED"
 
 
 def test_zephyr_exports_cycle_case_details_from_atm_latest() -> None:

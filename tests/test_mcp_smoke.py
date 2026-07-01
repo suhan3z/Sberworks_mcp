@@ -77,10 +77,15 @@ async def _run_stdio_smoke(port: int) -> None:
             assert "confluence_get_spaces" in names
             assert "confluence_search" in names
             assert "jira_get_issue" in names
+            assert "jira_get_remote_links" in names
+            assert "jira_get_development_details" in names
             assert "jira_create_issue" in names
+            assert "bitbucket_list_repositories" in names
             assert "bitbucket_create_repo" in names
             assert "bitbucket_create_pull_request" in names
+            assert "bitbucket_find_pull_requests_by_issue_key" in names
             assert "bitbucket_put_file" in names
+            assert "bitbucket_download_file" in names
             assert "zephyr_get_cycle" in names
             assert "zephyr_get_test_case_details" in names
             assert "zephyr_export_cycle_case_details" in names
