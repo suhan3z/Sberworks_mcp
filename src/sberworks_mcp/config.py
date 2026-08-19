@@ -13,6 +13,7 @@ class Settings:
     jira_base_url: str
     confluence_base_url: str
     bitbucket_base_url: str
+    jenkins_base_url: str
     auth_username: str
     auth_password: str
     bitbucket_server_bearer_token: str | None
@@ -32,6 +33,8 @@ class Settings:
             missing.append("CONFLUENCE_BASE_URL")
         if service == "bitbucket" and not self.bitbucket_base_url:
             missing.append("BITBUCKET_BASE_URL")
+        if service == "jenkins" and not self.jenkins_base_url:
+            missing.append("JENKINS_BASE_URL")
         if not self.auth_username and not (
             service == "bitbucket" and self.bitbucket_server_bearer_token
         ):
@@ -87,6 +90,7 @@ def load_settings(*, env_file: str | None = None, require_all: bool = False) -> 
         jira_base_url=os.getenv("JIRA_BASE_URL", "").rstrip("/"),
         confluence_base_url=os.getenv("CONFLUENCE_BASE_URL", "").rstrip("/"),
         bitbucket_base_url=os.getenv("BITBUCKET_BASE_URL", "").rstrip("/"),
+        jenkins_base_url=os.getenv("JENKINS_BASE_URL", "").rstrip("/"),
         auth_username=os.getenv("AUTH_USERNAME", ""),
         auth_password=os.getenv("AUTH_PASSWORD", ""),
         bitbucket_server_bearer_token=_optional(os.getenv("BITBUCKET_SERVER_BEARER_TOKEN")),

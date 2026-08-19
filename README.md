@@ -1,6 +1,6 @@
 # Sberworks MCP
 
-Local stdio MCP server for Jira, Confluence and Bitbucket Server/Data Center.
+Local stdio MCP server for Jira, Confluence, Bitbucket Server/Data Center and Jenkins.
 
 ## Prerequisites
 
@@ -209,8 +209,11 @@ Required:
 
 Zephyr methods use `JIRA_BASE_URL` and the same Jira authentication. They target the `/rest/atm/latest` API namespace.
 
+Jenkins is optional. When `JENKINS_BASE_URL` is set, the client uses the same `AUTH_USERNAME` and `AUTH_PASSWORD`, but authenticates with mTLS followed by the configured form flow. SAML installations are handled as Jenkins `SAMLRequest` → identity-provider login form → Jenkins `SAMLResponse`; a regular Jenkins form remains supported as a fallback. The account password is never sent as Jenkins HTTP Basic auth.
+
 Optional:
 
+- `JENKINS_BASE_URL`: Jenkins controller base URL, for example `https://sberworks.ru/jenkins-ci`.
 - `BITBUCKET_SERVER_BEARER_TOKEN`: takes precedence for Bitbucket auth.
 - `REQUESTS_CA_BUNDLE`: corporate CA bundle path.
 - `CLIENT_P12_PATH` and `CLIENT_P12_PASSWORD`: client certificate in P12 format.
@@ -282,6 +285,27 @@ Zephyr:
 - `zephyr_export_cycle_case_details`
 - `zephyr_probe_cycle_endpoints`
 
+Jenkins read tools:
+
+- `jenkins_get_info`
+- `jenkins_list_jobs`
+- `jenkins_get_job`
+- `jenkins_list_builds`
+- `jenkins_get_build`
+- `jenkins_get_console`
+- `jenkins_list_queue`
+- `jenkins_get_queue_item`
+- `jenkins_list_artifacts`
+- `jenkins_download_artifact`
+
+Jenkins write tools, guarded by `SBERWORKS_MCP_ENABLE_WRITES`:
+
+- `jenkins_trigger_build`
+- `jenkins_stop_build`
+- `jenkins_cancel_queue_item`
+
+Jenkins job paths are slash-separated logical paths such as `Folder/Multibranch/main`; the client converts each segment to Jenkins' `/job/<segment>` URL form. Build parameters must be scalar JSON values. File parameters and Jenkins administration are not supported.
+
 ## Resources
 
 - `jira://issue/{key}`
@@ -300,6 +324,8 @@ Zephyr:
   - Claude Desktop macOS logs: `~/Library/Logs/Claude`
 - Test with MCP Inspector when a client cannot connect.
 - If `CLIENT_P12_PATH` is set, make sure the file path is absolute for desktop MCP clients.
+- `doctor` opens the configured P12 with `CLIENT_P12_PASSWORD`; this catches a stale password even when an older converted PEM cache still exists.
+- A Jenkins SAML/form login error means the configured identity provider rejected the credentials or returned an unsupported form. A browser tab may continue to work because it already has a session cookie.
 
 ## Tests
 

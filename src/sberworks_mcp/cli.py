@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from cryptography.hazmat.primitives.serialization import pkcs12
 from dotenv import dotenv_values
 
 from sberworks_mcp.config import load_settings
@@ -25,6 +26,7 @@ REQUIRED_ENV = (
 )
 
 OPTIONAL_ENV = (
+    "JENKINS_BASE_URL",
     "BITBUCKET_SERVER_BEARER_TOKEN",
     "REQUESTS_CA_BUNDLE",
     "CLIENT_P12_PATH",
@@ -51,7 +53,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sberworks-mcp",
-        description="Local stdio MCP server for Jira, Confluence and Bitbucket Server/Data Center.",
+        description="Local stdio MCP server for Jira, Confluence, Bitbucket and Jenkins.",
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -107,6 +109,11 @@ def collect_init_values(
     values["JIRA_BASE_URL"] = _prompt(input_func, "Jira base URL")
     values["CONFLUENCE_BASE_URL"] = _prompt(input_func, "Confluence base URL")
     values["BITBUCKET_BASE_URL"] = _prompt(input_func, "Bitbucket base URL")
+    values["JENKINS_BASE_URL"] = _prompt(
+        input_func,
+        "Optional Jenkins base URL (press Enter to skip)",
+        required=False,
+    )
     values["AUTH_USERNAME"] = _prompt(input_func, "Shared basic auth username")
     values["AUTH_PASSWORD"] = secret_func("Shared basic auth password: ").strip()
     values["BITBUCKET_SERVER_BEARER_TOKEN"] = secret_func(
@@ -136,7 +143,10 @@ def write_env_file(path: Path, values: dict[str, str]) -> None:
         _dotenv_line("CONFLUENCE_BASE_URL", values["CONFLUENCE_BASE_URL"]),
         _dotenv_line("BITBUCKET_BASE_URL", values["BITBUCKET_BASE_URL"]),
         "",
-        "# Shared basic auth. Used for Jira, Confluence and Bitbucket fallback.",
+        "# Optional Jenkins endpoint. Jenkins uses mTLS plus form login.",
+        _dotenv_line("JENKINS_BASE_URL", values.get("JENKINS_BASE_URL", "")),
+        "",
+        "# Shared credentials. Basic auth for Atlassian; form login for Jenkins.",
         _dotenv_line("AUTH_USERNAME", values["AUTH_USERNAME"]),
         _dotenv_line("AUTH_PASSWORD", values["AUTH_PASSWORD"]),
         "",
@@ -311,7 +321,7 @@ def _check_env_values(report: DoctorReport, values: dict[str, str | None]) -> No
     for name in REQUIRED_ENV:
         if not (values.get(name) or "").strip():
             report.errors.append(f"Missing required env var: {name}")
-    for name in ("JIRA_BASE_URL", "CONFLUENCE_BASE_URL", "BITBUCKET_BASE_URL"):
+    for name in ("JIRA_BASE_URL", "CONFLUENCE_BASE_URL", "BITBUCKET_BASE_URL", "JENKINS_BASE_URL"):
         value = (values.get(name) or "").strip()
         if value and not _valid_http_url(value):
             report.errors.append(f"{name} must be an absolute http(s) URL: {value}")
@@ -331,6 +341,22 @@ def _check_env_values(report: DoctorReport, values: dict[str, str | None]) -> No
     _check_existing_path(report, p12_path, "CLIENT_P12_PATH")
     if p12_path and not p12_password:
         report.errors.append("CLIENT_P12_PASSWORD is required when CLIENT_P12_PATH is set.")
+    elif p12_path and p12_password and Path(p12_path).expanduser().exists():
+        try:
+            private_key, certificate, _additional = pkcs12.load_key_and_certificates(
+                Path(p12_path).expanduser().read_bytes(),
+                p12_password.encode("utf-8"),
+            )
+        except (OSError, ValueError):
+            report.errors.append(
+                "CLIENT_P12_PATH could not be opened with CLIENT_P12_PASSWORD; "
+                "the existing PEM cache was not modified."
+            )
+        else:
+            if private_key is None or certificate is None:
+                report.errors.append("CLIENT_P12_PATH does not contain both a private key and certificate.")
+            else:
+                report.info.append("Client P12 password and key pair are valid.")
 
 
 def _valid_http_url(value: str) -> bool:

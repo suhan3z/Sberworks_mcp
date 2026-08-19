@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -9,6 +10,7 @@ from sberworks_mcp.auth import SessionFactory
 from sberworks_mcp.clients.bitbucket import BitbucketClient
 from sberworks_mcp.clients.confluence import ConfluenceClient
 from sberworks_mcp.clients.jira import JiraClient
+from sberworks_mcp.clients.jenkins import JenkinsClient
 from sberworks_mcp.clients.zephyr import ZephyrClient
 from sberworks_mcp.config import Settings, load_settings, require_writes
 
@@ -53,6 +55,19 @@ def _zephyr() -> ZephyrClient:
         settings.jira_base_url,
         SessionFactory(settings, cache_dir=settings.cert_cache_dir).create(service="jira"),
         settings.timeout_seconds,
+    )
+
+
+@lru_cache(maxsize=1)
+def _jenkins() -> JenkinsClient:
+    settings = _settings()
+    return JenkinsClient(
+        settings.jenkins_base_url,
+        SessionFactory(settings, cache_dir=settings.cert_cache_dir).create(service="jenkins"),
+        settings.timeout_seconds,
+        username=settings.auth_username,
+        password=settings.auth_password,
+        download_dir=settings.download_dir,
     )
 
 
@@ -422,6 +437,111 @@ def zephyr_export_cycle_case_details(cycle_key: str) -> dict[str, Any]:
 def zephyr_probe_cycle_endpoints(project_id: int, cycle_key: str) -> list[dict[str, Any]]:
     """Probe Zephyr cycle page and /rest/atm/latest endpoints for diagnostics."""
     return _zephyr().probe_cycle_endpoints(project_id=project_id, cycle_key=cycle_key)
+
+
+@mcp.tool()
+def jenkins_get_info() -> dict[str, Any]:
+    """Read Jenkins controller metadata and the authenticated user."""
+    return _jenkins().get_info()
+
+
+@mcp.tool()
+def jenkins_list_jobs(folder_path: str | None = None, max_results: int = 100) -> dict[str, Any]:
+    """List immediate Jenkins jobs in the root or a nested folder."""
+    return _jenkins().list_jobs(folder_path=folder_path, max_results=max_results)
+
+
+@mcp.tool()
+def jenkins_get_job(job_path: str) -> dict[str, Any]:
+    """Read Jenkins job metadata. Use slash-separated paths for nested folders."""
+    return _jenkins().get_job(job_path=job_path)
+
+
+@mcp.tool()
+def jenkins_list_builds(job_path: str, limit: int = 20) -> dict[str, Any]:
+    """List recent builds for a Jenkins job."""
+    return _jenkins().list_builds(job_path=job_path, limit=limit)
+
+
+@mcp.tool()
+def jenkins_get_build(job_path: str, build_number: int) -> dict[str, Any]:
+    """Read one Jenkins build including parameters and artifact metadata."""
+    return _jenkins().get_build(job_path=job_path, build_number=build_number)
+
+
+@mcp.tool()
+def jenkins_get_console(
+    job_path: str,
+    build_number: int,
+    start: int = 0,
+    max_chars: int = 50_000,
+) -> dict[str, Any]:
+    """Read bounded progressive console output and return the next cursor."""
+    return _jenkins().get_console(
+        job_path=job_path,
+        build_number=build_number,
+        start=start,
+        max_chars=max_chars,
+    )
+
+
+@mcp.tool()
+def jenkins_list_queue() -> dict[str, Any]:
+    """Read the Jenkins build queue."""
+    return _jenkins().list_queue()
+
+
+@mcp.tool()
+def jenkins_get_queue_item(queue_id: int) -> dict[str, Any]:
+    """Read one Jenkins queue item."""
+    return _jenkins().get_queue_item(queue_id=queue_id)
+
+
+@mcp.tool()
+def jenkins_list_artifacts(job_path: str, build_number: int) -> dict[str, Any]:
+    """List artifact metadata for a Jenkins build."""
+    return _jenkins().list_artifacts(job_path=job_path, build_number=build_number)
+
+
+@mcp.tool()
+def jenkins_download_artifact(
+    job_path: str,
+    build_number: int,
+    artifact_path: str,
+    output_path: str | None = None,
+    output_dir: str | None = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Download one Jenkins build artifact to local disk and return metadata."""
+    return _jenkins().download_artifact(
+        job_path=job_path,
+        build_number=build_number,
+        artifact_path=artifact_path,
+        output_path=output_path,
+        output_dir=output_dir,
+        overwrite=overwrite,
+    )
+
+
+@mcp.tool()
+def jenkins_trigger_build(job_path: str, parameters: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Trigger a Jenkins build. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+    _require_writes()
+    return _jenkins().trigger_build(job_path=job_path, parameters=parameters)
+
+
+@mcp.tool()
+def jenkins_stop_build(job_path: str, build_number: int) -> dict[str, Any]:
+    """Stop a running Jenkins build. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+    _require_writes()
+    return _jenkins().stop_build(job_path=job_path, build_number=build_number)
+
+
+@mcp.tool()
+def jenkins_cancel_queue_item(queue_id: int) -> dict[str, Any]:
+    """Cancel a Jenkins queue item. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+    _require_writes()
+    return _jenkins().cancel_queue_item(queue_id=queue_id)
 
 
 @mcp.resource("jira://issue/{key}")
