@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sberworks-mcp"
 version = "0.1.0"
-description = "MCP server for Jira, Confluence and Bitbucket Server/Data Center"
+description = "MCP server for Jira, Confluence, Bitbucket Server/Data Center and Jenkins"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -20,6 +20,7 @@ def test_init_creates_env_without_printing_secrets(
             "https://jira.example.com",
             "https://wiki.example.com",
             "https://git.example.com/bitbucket",
+            "https://jenkins.example.com",
             "user",
             "",
             "",
@@ -36,6 +37,7 @@ def test_init_creates_env_without_printing_secrets(
     written = env_file.read_text(encoding="utf-8")
     output = capsys.readouterr().out
     assert "JIRA_BASE_URL=https://jira.example.com" in written
+    assert "JENKINS_BASE_URL=https://jenkins.example.com" in written
     assert "AUTH_PASSWORD=secret-password" in written
     assert "BITBUCKET_SERVER_BEARER_TOKEN=secret-token" in written
     assert "SBERWORKS_MCP_ENABLE_WRITES=false" in written
@@ -53,6 +55,7 @@ def test_init_env_escapes_values_for_dotenv(tmp_path: Path) -> None:
             "JIRA_BASE_URL": "https://jira.example.com",
             "CONFLUENCE_BASE_URL": "https://wiki.example.com",
             "BITBUCKET_BASE_URL": "https://git.example.com/bitbucket",
+            "JENKINS_BASE_URL": "https://jenkins.example.com",
             "AUTH_USERNAME": "user name",
             "AUTH_PASSWORD": 'pass # "quoted"',
             "BITBUCKET_SERVER_BEARER_TOKEN": "",
@@ -91,6 +94,7 @@ def test_doctor_returns_success_for_valid_env(tmp_path: Path, monkeypatch: pytes
                 "JIRA_BASE_URL=https://jira.example.com",
                 "CONFLUENCE_BASE_URL=https://wiki.example.com",
                 "BITBUCKET_BASE_URL=https://git.example.com/bitbucket",
+                "JENKINS_BASE_URL=https://jenkins.example.com",
                 "AUTH_USERNAME=user",
                 "AUTH_PASSWORD=pass",
                 "BITBUCKET_SERVER_BEARER_TOKEN=",
@@ -120,6 +124,7 @@ def test_doctor_returns_errors_for_invalid_env(tmp_path: Path, monkeypatch: pyte
                 "JIRA_BASE_URL=not-a-url",
                 "CONFLUENCE_BASE_URL=",
                 "BITBUCKET_BASE_URL=https://git.example.com/bitbucket",
+                "JENKINS_BASE_URL=not-a-url",
                 "AUTH_USERNAME=",
                 "AUTH_PASSWORD=",
                 "SBERWORKS_MCP_TIMEOUT_SECONDS=0",
@@ -134,7 +139,35 @@ def test_doctor_returns_errors_for_invalid_env(tmp_path: Path, monkeypatch: pyte
     assert report.exit_code == 1
     assert any("Missing required env var: CONFLUENCE_BASE_URL" in error for error in report.errors)
     assert any("JIRA_BASE_URL must be an absolute http(s) URL" in error for error in report.errors)
+    assert any("JENKINS_BASE_URL must be an absolute http(s) URL" in error for error in report.errors)
     assert any("SBERWORKS_MCP_TIMEOUT_SECONDS must be greater than 0" in error for error in report.errors)
+
+
+def test_doctor_reports_invalid_p12_password(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    p12 = tmp_path / "client.p12"
+    p12.write_bytes(b"not-a-p12")
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "JIRA_BASE_URL=https://jira.example.com",
+                "CONFLUENCE_BASE_URL=https://wiki.example.com",
+                "BITBUCKET_BASE_URL=https://git.example.com/bitbucket",
+                "JENKINS_BASE_URL=https://jenkins.example.com",
+                "AUTH_USERNAME=user",
+                "AUTH_PASSWORD=pass",
+                f"CLIENT_P12_PATH={p12}",
+                "CLIENT_P12_PASSWORD=wrong",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("sberworks_mcp.cli._check_distribution", lambda report: None)
+
+    report = cli.run_doctor(env_file)
+
+    assert report.exit_code == 1
+    assert any("could not be opened" in error for error in report.errors)
 
 
 def test_config_snippet_generates_claude_json(tmp_path: Path) -> None:
