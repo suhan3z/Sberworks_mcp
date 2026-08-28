@@ -189,6 +189,101 @@ def test_confluence_spaces_and_search_are_paginated() -> None:
     }
 
 
+def test_confluence_get_attachments_supports_filters() -> None:
+    session = FakeSession([FakeResponse({"results": []})])
+    client = ConfluenceClient("https://wiki.example.com/wiki", session, 30)
+
+    result = client.get_attachments(
+        "123",
+        filename="Стандарт Надёжности_V17.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        limit=10,
+        start=20,
+    )
+
+    assert result == {"results": []}
+    assert session.calls[0][1] == "https://wiki.example.com/wiki/rest/api/content/123/child/attachment"
+    assert session.calls[0][2]["params"] == {
+        "limit": 10,
+        "start": 20,
+        "filename": "Стандарт Надёжности_V17.xlsx",
+        "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "expand": "version,container,extensions",
+    }
+
+
+def test_confluence_download_attachment_streams_atomically(tmp_path) -> None:
+    payload = b"PK\x03\x04workbook"
+    metadata = {
+        "id": "987",
+        "type": "attachment",
+        "title": "Стандарт Надёжности_V17.xlsx",
+        "container": {"id": "123", "type": "page"},
+        "version": {"number": 17},
+        "extensions": {
+            "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "fileSize": len(payload),
+        },
+        "_links": {"download": "/download/attachments/123/reliability.xlsx?version=17"},
+    }
+    response = FakeResponse(
+        payload,
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"ETag": '"abc"', "Last-Modified": "Thu, 20 Aug 2026 10:00:00 GMT"},
+    )
+    session = FakeSession([FakeResponse(metadata), response])
+    client = ConfluenceClient("https://wiki.example.com/wiki", session, 30, download_dir=str(tmp_path))
+
+    result = client.download_attachment("987")
+    target = tmp_path / "Стандарт Надёжности_V17.xlsx"
+
+    assert target.read_bytes() == payload
+    assert result == {
+        "path": str(target.resolve()),
+        "bytes": len(payload),
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "attachment_id": "987",
+        "page_id": "123",
+        "file_name": "Стандарт Надёжности_V17.xlsx",
+        "media_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "file_size": len(payload),
+        "version": 17,
+        "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "etag": '"abc"',
+        "last_modified": "Thu, 20 Aug 2026 10:00:00 GMT",
+    }
+    assert response.closed is True
+    assert session.calls[0][1] == "https://wiki.example.com/wiki/rest/api/content/987"
+    assert session.calls[0][2]["params"] == {"expand": "version,container,extensions"}
+    assert session.calls[1][1] == (
+        "https://wiki.example.com/wiki/download/attachments/123/reliability.xlsx?version=17"
+    )
+    assert session.calls[1][2]["stream"] is True
+    assert session.calls[1][2]["timeout"] == 30
+
+
+def test_confluence_download_attachment_refuses_overwrite(tmp_path) -> None:
+    target = tmp_path / "questionnaire.xlsx"
+    target.write_bytes(b"existing")
+    metadata = {
+        "id": "654",
+        "type": "attachment",
+        "title": "questionnaire.xlsx",
+        "_links": {"download": "/wiki/download/attachments/321/questionnaire.xlsx"},
+    }
+    session = FakeSession([FakeResponse(metadata)])
+    client = ConfluenceClient("https://wiki.example.com/wiki", session, 30, download_dir=str(tmp_path))
+
+    try:
+        client.download_attachment("654")
+    except FileExistsError as exc:
+        assert str(target) in str(exc)
+    else:
+        raise AssertionError("download_attachment should refuse to overwrite existing files by default")
+
+    assert len(session.calls) == 1
+
+
 def test_bitbucket_file_and_pr_comment_paths() -> None:
     session = FakeSession(
         [
