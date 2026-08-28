@@ -218,7 +218,7 @@ Optional:
 - `REQUESTS_CA_BUNDLE`: corporate CA bundle path.
 - `CLIENT_P12_PATH` and `CLIENT_P12_PASSWORD`: client certificate in P12 format.
 - `SBERWORKS_MCP_CERT_CACHE_DIR`: directory for converted PEM certificate files. Defaults to `.cert_cache` next to `SBERWORKS_MCP_ENV_FILE`, so desktop clients can start the MCP server from any working directory.
-- `SBERWORKS_MCP_DOWNLOAD_DIR`: default directory for `bitbucket_download_file`. Defaults to the system temp directory under `sberworks-mcp-downloads`.
+- `SBERWORKS_MCP_DOWNLOAD_DIR`: default directory for Confluence attachment, Bitbucket file, and Jenkins artifact downloads. Defaults to the system temp directory under `sberworks-mcp-downloads`.
 - `SBERWORKS_MCP_ENABLE_WRITES`: defaults to `false`.
 - `SBERWORKS_MCP_TIMEOUT_SECONDS`: defaults to `30`.
 
@@ -255,6 +255,8 @@ Confluence:
 - `confluence_search`
 - `confluence_get_page`
 - `confluence_get_children`
+- `confluence_get_attachments`
+- `confluence_download_attachment`
 - `confluence_create_page`
 - `confluence_update_page`
 - `confluence_add_comment`

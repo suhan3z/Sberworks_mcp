@@ -105,6 +105,8 @@ async def _run_stdio_smoke(port: int) -> None:
             names = {tool.name for tool in tools.tools}
             assert "confluence_get_spaces" in names
             assert "confluence_search" in names
+            assert "confluence_get_attachments" in names
+            assert "confluence_download_attachment" in names
             assert "jira_get_issue" in names
             assert "jira_get_remote_links" in names
             assert "jira_get_development_details" in names

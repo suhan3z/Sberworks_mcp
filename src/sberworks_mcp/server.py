@@ -36,6 +36,7 @@ def _confluence() -> ConfluenceClient:
         settings.confluence_base_url,
         SessionFactory(settings, cache_dir=settings.cert_cache_dir).create(service="confluence"),
         settings.timeout_seconds,
+        download_dir=settings.download_dir,
     )
 
 
@@ -185,6 +186,42 @@ def confluence_get_page(page_id: str, expand: str = "body.storage,body.view,vers
 def confluence_get_children(page_id: str, limit: int = 25, start: int = 0) -> dict[str, Any]:
     """Read child pages for a Confluence page."""
     return _confluence().get_children(page_id=page_id, limit=limit, start=start)
+
+
+@mcp.tool()
+def confluence_get_attachments(
+    page_id: str,
+    filename: str | None = None,
+    media_type: str | None = None,
+    limit: int = 25,
+    start: int = 0,
+    expand: str | None = "version,container,extensions",
+) -> dict[str, Any]:
+    """List Confluence attachments for a page, optionally filtering by file name or media type."""
+    return _confluence().get_attachments(
+        page_id=page_id,
+        filename=filename,
+        media_type=media_type,
+        limit=limit,
+        start=start,
+        expand=expand,
+    )
+
+
+@mcp.tool()
+def confluence_download_attachment(
+    attachment_id: str,
+    output_path: str | None = None,
+    output_dir: str | None = None,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Download a Confluence attachment to local disk and return its path, size, and SHA-256."""
+    return _confluence().download_attachment(
+        attachment_id=attachment_id,
+        output_path=output_path,
+        output_dir=output_dir,
+        overwrite=overwrite,
+    )
 
 
 @mcp.tool()
