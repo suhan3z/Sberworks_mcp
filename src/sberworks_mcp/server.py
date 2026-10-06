@@ -140,10 +140,14 @@ def jira_add_attachment(key: str, file_path: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def jira_update_issue_fields(key: str, fields: dict[str, Any]) -> dict[str, Any]:
-    """Update Jira issue fields. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+def jira_update_issue_fields(
+    key: str,
+    fields: dict[str, Any] | None = None,
+    update: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Update Jira issue fields, or apply add and remove operations with update. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
     _require_writes()
-    return _jira().update_issue_fields(key=key, fields=fields)
+    return _jira().update_issue_fields(key=key, fields=fields, update=update)
 
 
 @mcp.tool()
@@ -162,6 +166,41 @@ def jira_transition_issue(
     """Move a Jira issue through a transition. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
     _require_writes()
     return _jira().transition_issue(key=key, transition_id=transition_id, fields=fields, update=update)
+
+
+@mcp.tool()
+def jira_list_issue_link_types() -> dict[str, Any]:
+    """List Jira issue link types with their inward and outward descriptions."""
+    return _jira().list_issue_link_types()
+
+
+@mcp.tool()
+def jira_create_issue_link(
+    link_type: str,
+    inward_key: str,
+    outward_key: str,
+    comment: str | None = None,
+) -> dict[str, Any]:
+    """Link two Jira issues, e.g. Relates or Blocks. Requires SBERWORKS_MCP_ENABLE_WRITES=true.
+
+    Jira REST naming is counter-intuitive: inward_key gets the outward description of the
+    link type. For Blocks (outward "blocks", inward "is blocked by"), inward_key="A" and
+    outward_key="B" read as "A blocks B". Use jira_list_issue_link_types to see descriptions.
+    """
+    _require_writes()
+    return _jira().create_issue_link(
+        link_type=link_type,
+        inward_key=inward_key,
+        outward_key=outward_key,
+        comment=comment,
+    )
+
+
+@mcp.tool()
+def jira_delete_issue_link(link_id: str) -> dict[str, Any]:
+    """Delete a Jira issue link by its id, as returned in issuelinks. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+    _require_writes()
+    return _jira().delete_issue_link(link_id=link_id)
 
 
 @mcp.tool()

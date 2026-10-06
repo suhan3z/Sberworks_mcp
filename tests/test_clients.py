@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+import pytest
+
 from sberworks_mcp.clients.bitbucket import BitbucketClient
 from sberworks_mcp.clients.confluence import ConfluenceClient
 from sberworks_mcp.clients.jira import JiraClient
@@ -139,6 +141,57 @@ def test_jira_create_issue_payload() -> None:
             "description": "Details",
         }
     }
+
+
+def test_jira_update_issue_fields_sends_update_block() -> None:
+    session = FakeSession([FakeResponse(b"", status_code=204)])
+    client = JiraClient("https://jira.example.com", session, 30)
+
+    result = client.update_issue_fields("TST-1", update={"labels": [{"add": "urgent"}]})
+
+    assert result == {"ok": True}
+    assert session.calls[0][0] == "PUT"
+    assert session.calls[0][1] == "https://jira.example.com/rest/api/2/issue/TST-1"
+    assert session.calls[0][2]["json"] == {"update": {"labels": [{"add": "urgent"}]}}
+
+
+def test_jira_update_issue_fields_requires_fields_or_update() -> None:
+    session = FakeSession([])
+    client = JiraClient("https://jira.example.com", session, 30)
+
+    with pytest.raises(ValueError):
+        client.update_issue_fields("TST-1")
+
+    assert session.calls == []
+
+
+def test_jira_create_issue_link_payload() -> None:
+    session = FakeSession([FakeResponse(b"", status_code=201), FakeResponse(b"", status_code=201)])
+    client = JiraClient("https://jira.example.com", session, 30)
+
+    client.create_issue_link("Relates", "TST-1", "TST-2")
+    client.create_issue_link("Blocks", "TST-1", "TST-2", comment="see thread")
+
+    assert session.calls[0][0] == "POST"
+    assert session.calls[0][1] == "https://jira.example.com/rest/api/2/issueLink"
+    assert session.calls[0][2]["json"] == {
+        "type": {"name": "Relates"},
+        "inwardIssue": {"key": "TST-1"},
+        "outwardIssue": {"key": "TST-2"},
+    }
+    assert session.calls[1][2]["json"]["comment"] == {"body": "see thread"}
+
+
+def test_jira_issue_link_types_and_delete_paths() -> None:
+    session = FakeSession([FakeResponse({"issueLinkTypes": []}), FakeResponse(b"", status_code=204)])
+    client = JiraClient("https://jira.example.com", session, 30)
+
+    assert client.list_issue_link_types()["issueLinkTypes"] == []
+    assert client.delete_issue_link("10101") == {"ok": True}
+
+    assert session.calls[0][1] == "https://jira.example.com/rest/api/2/issueLinkType"
+    assert session.calls[1][0] == "DELETE"
+    assert session.calls[1][1] == "https://jira.example.com/rest/api/2/issueLink/10101"
 
 
 def test_confluence_update_page_fetches_next_version() -> None:

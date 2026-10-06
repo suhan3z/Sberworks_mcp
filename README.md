@@ -249,6 +249,9 @@ Jira:
 - `jira_update_issue_fields`
 - `jira_list_transitions`
 - `jira_transition_issue`
+- `jira_list_issue_link_types`
+- `jira_create_issue_link`
+- `jira_delete_issue_link`
 
 Confluence:
 
