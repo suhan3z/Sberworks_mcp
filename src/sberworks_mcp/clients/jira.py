@@ -75,8 +75,42 @@ class JiraClient(AtlassianClient):
                 files=files,
             )
 
-    def update_issue_fields(self, key: str, fields: dict[str, Any]) -> dict[str, Any]:
-        return self.request("PUT", f"/rest/api/2/issue/{key}", json={"fields": fields})
+    def update_issue_fields(
+        self,
+        key: str,
+        fields: dict[str, Any] | None = None,
+        update: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if not fields and not update:
+            raise ValueError("Either fields or update must be provided")
+        payload: dict[str, Any] = {}
+        if fields:
+            payload["fields"] = fields
+        if update:
+            payload["update"] = update
+        return self.request("PUT", f"/rest/api/2/issue/{key}", json=payload)
+
+    def list_issue_link_types(self) -> dict[str, Any]:
+        return self.request("GET", "/rest/api/2/issueLinkType")
+
+    def create_issue_link(
+        self,
+        link_type: str,
+        inward_key: str,
+        outward_key: str,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "type": {"name": link_type},
+            "inwardIssue": {"key": inward_key},
+            "outwardIssue": {"key": outward_key},
+        }
+        if comment:
+            payload["comment"] = {"body": comment}
+        return self.request("POST", "/rest/api/2/issueLink", json=payload)
+
+    def delete_issue_link(self, link_id: str) -> dict[str, Any]:
+        return self.request("DELETE", f"/rest/api/2/issueLink/{link_id}")
 
     def list_transitions(self, key: str) -> dict[str, Any]:
         return self.request("GET", f"/rest/api/2/issue/{key}/transitions")
