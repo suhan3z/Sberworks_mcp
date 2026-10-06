@@ -145,7 +145,11 @@ def jira_update_issue_fields(
     fields: dict[str, Any] | None = None,
     update: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Update Jira issue fields, or apply add and remove operations with update. Requires SBERWORKS_MCP_ENABLE_WRITES=true."""
+    """Update Jira issue fields, or apply set, add and remove operations with update.
+
+    Allowed operations differ per field: call jira_get_issue with expand="editmeta".
+    Requires SBERWORKS_MCP_ENABLE_WRITES=true.
+    """
     _require_writes()
     return _jira().update_issue_fields(key=key, fields=fields, update=update)
 
