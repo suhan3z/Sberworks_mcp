@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
   "cryptography>=42",
-  "mcp[cli]>=1.9.0",
+  "mcp[cli]>=1.9.0,<2",
   "python-dotenv>=1.0.1",
   "requests>=2.32.3",
 ]
